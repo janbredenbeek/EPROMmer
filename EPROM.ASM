@@ -22,89 +22,89 @@ UNDER    MACRO A
          ENDM
 
 LF       EQU      $0A
-ED_SIZE  EQU      18
-EP_2764  EQU      0
-EP_27128 EQU      1
-EP_27256 EQU      2
-EP_2725N EQU      3
-EP_27512 EQU      4
+ED_SIZE  EQU      18                ; Number of screen lines in editor
+EP_2764  EQU      0                 ; EPROM type 2764
+EP_27128 EQU      1                 ; EPROM type 27128
+EP_27256 EQU      2                 ; EPROM type 27256
+EP_2725N EQU      3                 ; EPROM type 27256 NEC
+EP_27512 EQU      4                 ; EPROM type 27512
 
 IO_BASE  SETSTR   ROMSTART+$2000    ; Base of 8255 I/O registers
 
-PA_8255  EQU      0                 ; 8255 I/O
-PB_8255  EQU      1
-PC_8255  EQU      2
-CTL_8255 EQU      3
+PA_8255  EQU      0                 ; 8255 I/O - PA0-PA7
+PB_8255  EQU      1                 ; 8255 I/O - PB0-PB7
+PC_8255  EQU      2                 ; 8255 I/O - PC0-PC7
+CTL_8255 EQU      3                 ; 8255 I/O - Control register
 CTL_CE   EQU      $1000             ; Control register for CE/OE/Vpp
 
 * Variable storage
 
          OFFSET   0
 
-CONCHAN  DS.L     1
-EDCHAN   DS.L     1
-PROGBAS  DS.L     1
-PROGEND  DS.L     1
-PROGLEN  DS.L     1
-ROMSIZE  DS.L     1
-WINPOS   DS.W     1
-ROMTYPE  DS.B     1
-PC_MASK  DS.B     1
-         DS.W     0
-BUFFER   DS.B     80
+CONCHAN  DS.L     1                 ; Console channel ID
+EDCHAN   DS.L     1                 ; Editor channel ID
+PROGBAS  DS.L     1                 ; ptr to start of program
+PROGEND  DS.L     1                 ; ptr to end of program
+PROGLEN  DS.L     1                 ; program length
+ROMSIZE  DS.L     1                 ; Size of EPROM
+WINPOS   DS.W     1                 ; Current window position
+ROMTYPE  DS.B     1                 ; Type of EPROM
+PC_MASK  DS.B     1                 ; Mask for 8255 PC register
+         DS.W     0                 ; Align on word boundary
+BUFFER   DS.B     80                ; Buffer space
 
 * Start of ROM code
 
          SECTION  CODE
 
-ROMSTART DC.L     $4AFB0001
-         DC.W     PROCDEF-ROMSTART
-         DC.W     INIT-ROMSTART
+ROMSTART DC.L     $4AFB0001         ; Marker
+         DC.W     PROCDEF-ROMSTART  ; Procedure definitions
+         DC.W     INIT-ROMSTART     ; Offset of initialisation code
          STRING$  {'EPROMmer V1.00   1988 Jan Bredenbeek',LF}
-PROCDEF  DC.W     1
+PROCDEF  DC.W     1                 ; Just one procedure...
          DC.W     EPROM-*
          DC.B     5,'EPROM'
          DC.W     0,0,0
 
 * Initialisation code - executed at boot time         
          
-INIT     LEA      [IO_BASE],A5
-         MOVE.B   #%10010000,CTL_8255(A5)
-         MOVE.B   #0,PB_8255(A5)
-         MOVE.B   #%11000000,PC_8255(A5)
-         MOVE.B   #%0011,CTL_CE(A5)
+INIT     LEA      [IO_BASE],A5      ; Point to base of I/O registers
+         MOVE.B   #%10010000,CTL_8255(A5)    ;
+         MOVE.B   #0,PB_8255(A5)    ; All zeros on PB0-PB7
+         MOVE.B   #%11000000,PC_8255(A5)     ; Clear /OE
+         MOVE.B   #%0011,CTL_CE(A5)          ; Clear /CE and /OE
          RTS
 
 * BASIC command - just creates and executes the real job         
 
-EPROM    MOVEQ    #-1,D1
-         MOVEQ    #18,D2
-         MOVE.L   #512,D3
-         SUBA.L   A1,A1
-         QDOS     MT.CJOB
+EPROM    MOVEQ    #-1,D1            ; Owner
+         MOVEQ    #18,D2            ; Just 18 bytes for code
+         MOVE.L   #512,D3           ; and 512 for data
+         SUBA.L   A1,A1             ; Start address = start of area created
+         QDOS     MT.CJOB           ; Create job
          TST.L    D0
-         BNE.S    EPROM_RT
-         MOVE.W   #$4EF9,(A0)+
-         LEA      START,A1
+         BNE.S    EPROM_RT          ; exit if error
+         MOVE.W   #$4EF9,(A0)+      ; Opcode for JMP.L
+         LEA      START,A1          ; to 'real' start address in ROM
          MOVE.L   A1,(A0)+
-         MOVE.L   #$4AFB0008,(A0)+
-         MOVE.L   #'EPRO',(A0)+
+         MOVE.L   #$4AFB0008,(A0)+  ; Marker + length of name string
+         MOVE.L   #'EPRO',(A0)+     ; Enter name
          MOVE.L   #'Mmer',(A0)
          MOVEQ    #32,D2
          MOVEQ    #-1,D3
-         QDOS     MT.ACTIV
+         QDOS     MT.ACTIV          ; Now activate our job
 EPROM_RT RTS
 
-GUARDIAN STRING$  {'CON_448X194A32X19'}
-GUARDPAR DC.B     4+4*8+3*64,2,0,7
-CONNAME  STRING$  {'CON_400X180A56X26'}
-CON_PAR  DC.B     0,0,0,7
+GUARDIAN STRING$  {'CON_448X194A32X19'} ; Guardian window
+GUARDPAR DC.B     4+4*8+3*64,2,0,7      ; Border colour, width, paper, ink
+CONNAME  STRING$  {'CON_400X180A56X26'} ; Console channel
+CON_PAR  DC.B     0,0,0,7               ; No border, paper black, ink white
 
 * Start of job
 
-START    ADDA.L   A4,A6
-         LEA      [IO_BASE],A5
-         MOVE.B   #%10010000,CTL_8255(A5)
+START    ADDA.L   A4,A6             ; A6 now points to start of data area
+         LEA      [IO_BASE],A5      ; and A5 to start of I/O
+         MOVE.B   #%10010000,CTL_8255(A5) ; Init registers
          MOVE.B   #0,PB_8255(A5)
          MOVEQ    #%11000000,D0
          MOVE.B   D0,PC_MASK(A6)
@@ -112,27 +112,27 @@ START    ADDA.L   A4,A6
          MOVE.B   #%00000011,CTL_CE(A5)
          MOVEQ    #-1,D1
          MOVEQ    #-1,D2
-         QDOS     MT.DMODE
-         TST.B    D1
+         QDOS     MT.DMODE          ; Test mode
+         TST.B    D1                ; if MODE 8, change to MODE 4
          IF NE THEN
             MOVEQ    #0,D1
             MOVEQ    #-1,D2
             QDOS     MT.DMODE
          ENDIF
-         LEA      GUARDIAN,A0
+         LEA      GUARDIAN,A0       
          LEA      GUARDPAR,A1
-         MOVE.W   UT_WINDW,A2
+         MOVE.W   UT_WINDW,A2       ; Open guardian window
          JSR      (A2)
          MOVE.L   A0,EDCHAN(A6)
          LEA      CONNAME,A0
          LEA      CON_PAR,A1
-         MOVE.W   UT_WINDW,A2
+         MOVE.W   UT_WINDW,A2       ; and console window
          JSR      (A2)
          MOVE.L   A0,CONCHAN(A6)
          MOVEQ    #3,D1
          MOVEQ    #1,D2
          MOVEQ    #-1,D3
-         QDOS     SD.SETSZ
+         QDOS     SD.SETSZ          ; print BIG characters!
          PRINT    {'       QL EPROMmer',LF,LF}
          MOVEQ    #1,D1
          MOVEQ    #0,D2
@@ -153,6 +153,8 @@ START    ADDA.L   A4,A6
          CLR.L    PROGBAS(A6)
          BRA      MAIN_KEY
 
+; Routine to print text in underline (called by UNDER macro)
+
 UNDERLIN MOVE.L   A1,-(A7)
          MOVEQ    #1,D1
          QDOS     SD.SETUL
@@ -162,6 +164,14 @@ UNDERLIN MOVE.L   A1,-(A7)
          MOVEQ    #0,D1
          QDOS     SD.SETUL
          RTS
+
+; Display a menu and get choice from user
+; Entry: A1 menu structure:
+;        DC.W     NumberOfEntries
+;        STRING$  'Entry1' (QDOS string)
+;        STRING$  'Entry2'
+;        ... and so on
+; Exit:  D1 menu index chosen (0-based)
 
 GETMENU  MOVE.W   (A1)+,D5
          MOVE.L   A1,A3
@@ -225,6 +235,8 @@ GM_END   MOVE.W   D4,D1
          SUBQ.W   #1,D1
          RTS
 
+; Print menu item highlighted
+
 PR_ITEM1 MOVE.W   D1,-(A7)
          MOVEQ    #4,D1
          QDOS     SD.SETST
@@ -253,6 +265,8 @@ PR_ITEM3 MOVE.W   (A1)+,D2
          QDOS     SD.SETIN
          RTS
 
+; Get 'Yes or No' from user
+
 YESNO    MOVE.L   CONCHAN(A6),A0
          PRINT    {'? (Y/N) '}
          MOVEQ    #-1,D3
@@ -273,6 +287,8 @@ YESNO_1  QDOS     IO.FBYTE
          CMPI.B   #'Y',D2
          RTS
 
+; Sound a BEEP
+
 BEEP     MOVEM.L  D0-D1/D5/D7/A3,-(A7)
          LEA      BEEP_PAR,A3
          QDOS     MT.IPCOM
@@ -280,11 +296,17 @@ BEEP     MOVEM.L  D0-D1/D5/D7/A3,-(A7)
          RTS
 BEEP_PAR DC.B     $0A,8,$55,$55,$AA,$AA,5,5,0,0,144,13,0,0,1
 
+; Sound BEEP and clear entered text from cursor to end of line
+
 INERROR  BSR      BEEP
          MOVE.W   WINPOS(A6),D1
          QDOS     SD.TAB
          QDOS     SD.CLRRT
          RTS
+
+; Get a line of input from user
+; Entry: D2 buffer size
+; Exit:  BUFFER(A6) filled with string (QDOS format)
 
 GETLINE  MOVE.L   CONCHAN(A6),A0
          MOVEQ    #-1,D3
@@ -304,6 +326,12 @@ GL_AGAIN LEA      BUFFER+2(A6),A1
          SUBQ.W   #1,D1
          MOVE.W   D1,-(A1)
          RTS
+
+; Open file
+; Entry: file name in BUFFER(A6)
+;        D3: Open mode
+; Exit:  D0 error code
+;        A0 channel ID (if no error)
 
 OP_FILE  MOVE.W   D3,-(A7)
 OP_AGAIN LEA      BUFFER(A6),A0
@@ -332,6 +360,9 @@ OP_ERROR MOVE.L   CONCHAN(A6),A0
 OP_END   MOVE.W   (A7)+,D3
          TST.L    D0
          RTS
+
+; Get address (hex or decimal)
+; Decimal numbers must be preceded by '&'
 
 GETADDR  MOVEQ    #9,D2
          BSR      GETLINE
@@ -378,6 +409,8 @@ GA_NC    MOVEQ    #0,D1
          MOVEQ    #ERR.NC,D0
          RTS
 
+; Convert D1.L to decimal string at (A1)
+
 ITOD.L   MOVEQ    #0,D2
 ITODL_1  MOVEM.L  D0-D1,-(A7)
          CMPI.L   #9,D1
@@ -401,6 +434,8 @@ ITODL_S  ADDI.B   #'0',D1
          MOVEM.L  (A7)+,D0-D1
          RTS
 
+; Convert D1.L to hexadecimal string at (A1) (variable length)
+
 ITOH.L   MOVEQ    #0,D2
 ITOHL_1  MOVEM.L  D0-D1,-(A7)
          MOVEQ    #$0F,D0
@@ -418,6 +453,8 @@ ITOHL_S1 MOVE.B   D1,(A1)+
          ADDQ.W   #1,D2
          MOVEM.L  (A7)+,D0-D1
          RTS
+
+; Convert D1.B or D1.W to hexadecimal string at (A1) (fixed length)
 
 ITOH.B   MOVEQ    #2,D0
          BRA.S    ITOH_1
@@ -437,14 +474,21 @@ ITOH_2   MOVE.B   D2,-(A1)
          MOVEM.L  (A7)+,D1-D2/A1
          RTS
 
-GO_SUB   BSR      GETMENU
-         MOVE.L   D1,-(A7)
-         QDOS     SD.CLEAR
-         MOVEM.L  (A7)+,D1/A1
+; Jump to menu subroutine
+; Entry: A1 ptr to menu structure (see GETMENU)
+;        Call should be followed by table containing relative addresses
+;        to target subroutines for each menu entry
+
+GO_SUB   BSR      GETMENU           ; Get menu index
+         MOVE.L   D1,-(A7)          ; Save temporarily
+         QDOS     SD.CLEAR          ; Clear screen
+         MOVEM.L  (A7)+,D1/A1       ; Retrieve index and return address
          ADD.W    D1,D1
-         ADDA.W   D1,A1
-         ADDA.W   (A1),A1
-         JMP      (A1)
+         ADDA.W   D1,A1             ; index into the table of word offsets
+         ADDA.W   (A1),A1           ; Point A1 at target address
+         JMP      (A1)              ; ... and jump to it
+
+; Return address from all main menu choices (should be BRAnched to)
 
 MAIN_RET MOVE.L   CONCHAN(A6),A0
          MOVEQ    #-1,D3
@@ -465,17 +509,19 @@ MAIN_KEY QDOS     SD.CURE
          QDOS     SD.CURS
 MAIN_CLR QDOS     SD.CLEAR
 
+; Main menu
+
 MAINMENU MOVE.L   CONCHAN(A6),A0
-         UNDER    {'MAIN MENU',LF,LF}
-         LEA      MAIN_MN,A1
-         BSR      GO_SUB
-         DC.W     SELROM-*
-         DC.W     LDFILE-*
-         DC.W     LDEPROM-*
-         DC.W     EDITOR-*
-         DC.W     SAVPROG-*
-         DC.W     PROGRAM-*
-         DC.W     QUIT-*
+         UNDER    {'MAIN MENU',LF,LF} ; Display heading
+         LEA      MAIN_MN,A1          ; Table of menu options
+         BSR      GO_SUB              ; Get choice and jump to handler
+         DC.W     SELROM-*          ; Select EPROM type
+         DC.W     LDFILE-*          ; Load program from file
+         DC.W     LDEPROM-*         ; Load program from EPROM
+         DC.W     EDITOR-*          ; Editor
+         DC.W     SAVPROG-*         ; Save program to file
+         DC.W     PROGRAM-*         ; Program EPROM
+         DC.W     QUIT-*            ; Quit
 
 MAIN_MN  DC.W     7
          STRING$  {' 1. Select EPROM type '}
